@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A producer or buyer in the system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "role": { "type": "string", "enum": ["seller", "buyer"] },
+        "barracaId": { "type": "string" }
+      },
+      "required": ["name", "whatsapp", "role"]
+    },
+    "Stall": {
+      "title": "Stall",
+      "description": "A stall in the CEASA market.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["name", "ownerId"]
+    },
+    "StallProduct": {
+      "title": "StallProduct",
+      "description": "A product offered by a specific stall.",
+      "type": "object",
+      "properties": {
+        "stallId": { "type": "string" },
+        "productId": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["stallId", "productId", "price", "stock"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A purchase order from a buyer to a stall.",
+      "type": "object",
+      "properties": {
+        "stallId": { "type": "string" },
+        "stallName": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "buyerName": { "type": "string" },
+        "buyerPhone": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "shipped", "delivered", "cancelled"] },
+        "items": { "type": "array" },
+        "address": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "qualityFeedback": { "type": "object" },
+        "logistics": { "type": "object" }
+      },
+      "required": ["stallId", "buyerId", "buyerName", "buyerPhone", "date", "total", "status", "items"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data."
+    },
+    "/stalls/{stallId}": {
+      "schema": "Stall",
+      "description": "Stall information."
+    },
+    "/stallProducts/{productId}": {
+      "schema": "StallProduct",
+      "description": "Products offered by stalls."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Purchase orders."
+    }
+  }
+}

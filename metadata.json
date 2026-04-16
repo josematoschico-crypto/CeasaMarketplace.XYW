@@ -1,0 +1,7 @@
+{
+  "name": "CEASA Marketplace",
+  "description": "Plataforma B2B para venda de produtos hortifruti direto do CEASA.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - name: string (required)
+    //   - whatsapp: string (required)
+    //   - role: string (required, 'seller' or 'buyer')
+    //   - barracaId: string (optional)
+    //
+    // Collection: stalls
+    // Document ID: stallId
+    // Fields:
+    //   - name: string (required)
+    //   - ownerId: string (required)
+    //   - location: string (optional)
+    //
+    // Collection: orders
+    // Document ID: orderId
+    // Fields:
+    //   - stallId: string (required)
+    //   - buyerId: string (required)
+    //   - buyerName: string (required)
+    //   - buyerPhone: string (required)
+    //   - date: string (required, ISO 8601)
+    //   - total: number (required)
+    //   - status: string (required, enum)
+    //   - items: list (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         (request.auth.token.email == "josematos.chico@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isStallOwner(stallId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/stalls/$(stallId)) &&
+             get(/databases/$(database)/documents/stalls/$(stallId)).data.ownerId == request.auth.uid;
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() > 0 && val.size() <= maxLen;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'whatsapp', 'role']) &&
+             isValidString(data.name, 100) &&
+             isValidString(data.whatsapp, 20) &&
+             data.role in ['seller', 'buyer', 'driver'];
+    }
+
+    function isValidStall(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'location', 'rating', 'image', 'isActive']) &&
+             isValidString(data.name, 100) &&
+             data.ownerId == request.auth.uid &&
+             data.rating is number &&
+             data.isActive is bool;
+    }
+
+    function isValidStallProduct(data) {
+      return data.keys().hasAll(['stallId', 'productId', 'price', 'stock']) &&
+             isValidString(data.stallId, 50) &&
+             isValidString(data.productId, 100) &&
+             data.price is number && data.price >= 0 &&
+             data.stock is number && data.stock >= 0;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['stallId', 'sellerId', 'buyerId', 'buyerName', 'buyerPhone', 'date', 'total', 'status', 'items']) &&
+             isValidString(data.stallId, 50) &&
+             isValidString(data.sellerId, 50) &&
+             (!('stallName' in data) || isValidString(data.stallName, 100)) &&
+             isValidString(data.buyerId, 50) &&
+             isValidString(data.buyerName, 100) &&
+             isValidString(data.buyerPhone, 20) &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'] &&
+             data.items is list &&
+             (!('qualityFeedback' in data) || data.qualityFeedback is map) &&
+             (!('logistics' in data) || data.logistics is map);
+    }
+
+    // Collection: users
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: stalls
+    match /stalls/{stallId} {
+      allow get, list: if true; // Publicly readable
+      allow create: if isAuthenticated() && isValidStall(request.resource.data);
+      allow update: if isAuthenticated() && ((isOwner(resource.data.ownerId) && isValidStall(request.resource.data)) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Collection: stallProducts
+    match /stallProducts/{productId} {
+      allow get, list: if true; // Publicly readable
+      allow create: if isAuthenticated() && isValidStallProduct(request.resource.data) && isStallOwner(request.resource.data.stallId);
+      allow update: if isAuthenticated() && 
+                    ((isStallOwner(resource.data.stallId) && isValidStallProduct(request.resource.data)) || isAdmin());
+      allow delete: if isAuthenticated() && (isStallOwner(resource.data.stallId) || isAdmin());
+    }
+
+    // Collection: orders
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId) || isAdmin());
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data) && isOwner(request.resource.data.buyerId);
+      allow update: if isAuthenticated() && isValidOrder(request.resource.data) && 
+                    ((isOwner(resource.data.sellerId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'logistics'])) || 
+                     (isOwner(resource.data.buyerId) && (request.resource.data.status == 'cancelled' || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['qualityFeedback', 'status']))) || 
+                     isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}
